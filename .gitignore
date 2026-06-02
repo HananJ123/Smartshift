@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.Python
+
+# Virtuelle Umgebung
+.venv/
+venv/
+env/
+
+# Umgebungsvariablen (Secrets!)
+.env
+
+# Datenbank (lokale Daten)
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

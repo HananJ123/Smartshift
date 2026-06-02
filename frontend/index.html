@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smartshift – Schichtplanung</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+
+<!-- ── Sidebar ── -->
+<aside id="sidebar">
+  <div class="sidebar-logo">
+    <h1>Smart<span>shift</span></h1>
+    <small>Schichtplanung leicht gemacht</small>
+  </div>
+  <nav>
+    <a href="#" class="nav-link active" data-page="dashboard">
+      <span class="icon">📊</span> Dashboard
+    </a>
+    <a href="#" class="nav-link" data-page="employees">
+      <span class="icon">👥</span> Mitarbeiter
+    </a>
+    <a href="#" class="nav-link" data-page="availabilities">
+      <span class="icon">📅</span> Verfügbarkeiten
+    </a>
+    <a href="#" class="nav-link" data-page="absences">
+      <span class="icon">🏥</span> Abwesenheiten
+    </a>
+    <a href="#" class="nav-link" data-page="requirements">
+      <span class="icon">📋</span> Schichtanforderungen
+    </a>
+    <a href="#" class="nav-link" data-page="schedule">
+      <span class="icon">🗓️</span> Schichtplan
+    </a>
+    <a href="#" class="nav-link" data-page="gemini">
+      <span class="icon">🤖</span> KI-Assistent
+    </a>
+    <hr style="border-color:rgba(255,255,255,.1);margin:8px 0;">
+    <a href="#" class="nav-link" data-page="settings">
+      <span class="icon">⚙️</span> Einstellungen
+    </a>
+  </nav>
+  <div class="sidebar-footer">v1.0.0 · Smartshift MVP</div>
+</aside>
+
+<!-- ── Main ── -->
+<div id="main">
+  <div class="topbar">
+    <h2 id="page-title">Dashboard</h2>
+    <div class="business-selector">
+      <span>Betrieb:</span>
+      <select id="business-select">
+        <option value="">– Betrieb wählen –</option>
+      </select>
+      <button class="btn btn-ghost btn-sm" id="btn-new-business">+ Neu</button>
+    </div>
+  </div>
+
+  <div class="page-content">
+
+    <!-- ── Dashboard ── -->
+    <div class="page active" id="page-dashboard">
+      <div class="stats-grid" id="dashboard-stats">
+        <div class="stat-card">
+          <div class="stat-icon blue">👥</div>
+          <div class="stat-info"><p>Mitarbeiter</p><h3 id="stat-employees">–</h3></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon orange">📋</div>
+          <div class="stat-info"><p>Schichtanforderungen</p><h3 id="stat-requirements">–</h3></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green">✅</div>
+          <div class="stat-info"><p>Schichten diese Woche</p><h3 id="stat-shifts">–</h3></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon red">⚠️</div>
+          <div class="stat-info"><p>Unterbesetzte Schichten</p><h3 id="stat-understaffed">–</h3></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🚀 Schnellaktionen</div>
+        <div class="flex gap-3" style="flex-wrap:wrap;">
+          <button class="btn btn-primary" id="dash-generate-btn">🗓️ Wochenplan erstellen</button>
+          <button class="btn btn-ghost" id="dash-export-btn">📥 CSV exportieren</button>
+        </div>
+        <div id="dash-week-info" class="mt-2 text-muted text-sm"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📊 Aktuelle Woche – Übersicht</div>
+        <div id="dashboard-schedule-preview"></div>
+      </div>
+    </div>
+
+    <!-- ── Employees ── -->
+    <div class="page" id="page-employees">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="fw-600">Mitarbeiterverwaltung</h3>
+        <button class="btn btn-primary" id="btn-add-employee">+ Mitarbeiter hinzufügen</button>
+      </div>
+      <div class="card">
+        <div class="table-wrapper">
+          <table id="employees-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Level</th>
+                <th>Rollen</th>
+                <th>Bereiche</th>
+                <th>Ziel h/Woche</th>
+                <th>Max h/Woche</th>
+                <th>Status</th>
+                <th>Aktionen</th>
+              </tr>
+            </thead>
+            <tbody id="employees-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Availabilities ── -->
+    <div class="page" id="page-availabilities">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="fw-600">Verfügbarkeiten</h3>
+        <button class="btn btn-primary" id="btn-add-availability">+ Verfügbarkeit eintragen</button>
+      </div>
+      <div class="filter-bar">
+        <label>Mitarbeiter:</label>
+        <select id="avail-filter-employee">
+          <option value="">Alle</option>
+        </select>
+        <label>Woche ab:</label>
+        <input type="date" id="avail-filter-week" />
+      </div>
+      <div class="card">
+        <div class="table-wrapper">
+          <table id="avail-table">
+            <thead>
+              <tr>
+                <th>Mitarbeiter</th>
+                <th>Datum</th>
+                <th>Verfügbar</th>
+                <th>Von</th>
+                <th>Bis</th>
+                <th>Wunschschicht</th>
+                <th>Kommentar</th>
+                <th>Aktionen</th>
+              </tr>
+            </thead>
+            <tbody id="avail-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Absences ── -->
+    <div class="page" id="page-absences">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="fw-600">Abwesenheiten & Krankmeldungen</h3>
+        <button class="btn btn-primary" id="btn-add-absence">+ Abwesenheit eintragen</button>
+      </div>
+      <div class="card">
+        <div class="table-wrapper">
+          <table id="absence-table">
+            <thead>
+              <tr>
+                <th>Mitarbeiter</th>
+                <th>Typ</th>
+                <th>Von</th>
+                <th>Bis</th>
+                <th>Kommentar</th>
+                <th>Genehmigt</th>
+                <th>Aktionen</th>
+              </tr>
+            </thead>
+            <tbody id="absence-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Shift Requirements ── -->
+    <div class="page" id="page-requirements">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="fw-600">Schichtanforderungen</h3>
+        <button class="btn btn-primary" id="btn-add-requirement">+ Anforderung hinzufügen</button>
+      </div>
+      <div class="card">
+        <div class="table-wrapper">
+          <table id="req-table">
+            <thead>
+              <tr>
+                <th>Wochentag / Datum</th>
+                <th>Bereich</th>
+                <th>Rolle</th>
+                <th>Von</th>
+                <th>Bis</th>
+                <th>Anzahl</th>
+                <th>Aktiv</th>
+                <th>Aktionen</th>
+              </tr>
+            </thead>
+            <tbody id="req-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Schedule ── -->
+    <div class="page" id="page-schedule">
+      <div class="flex justify-between items-center mb-4" style="flex-wrap:wrap;gap:12px;">
+        <div class="week-nav">
+          <button class="btn btn-ghost btn-sm" id="week-prev">◀</button>
+          <h3 id="week-label">KW –</h3>
+          <button class="btn btn-ghost btn-sm" id="week-next">▶</button>
+        </div>
+        <div class="section-actions">
+          <button class="btn btn-primary" id="btn-generate-schedule">🗓️ Plan erstellen</button>
+          <button class="btn btn-danger btn-sm" id="btn-delete-schedule">🗑️ Plan löschen</button>
+          <button class="btn btn-ghost btn-sm" id="btn-export-csv">📥 CSV Export</button>
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <label>Filter Mitarbeiter:</label>
+        <select id="schedule-filter-emp"><option value="">Alle</option></select>
+        <label>Filter Bereich:</label>
+        <select id="schedule-filter-area"><option value="">Alle</option></select>
+      </div>
+
+      <div id="schedule-legend" class="flex gap-2 mb-4" style="font-size:12px;">
+        <span><span style="border-left:3px solid var(--primary);padding-left:6px;background:var(--primary-light);border-radius:3px;padding:2px 6px;">Besetzt</span></span>
+        <span><span style="border-left:3px solid var(--danger);padding-left:6px;background:var(--danger-light);border-radius:3px;padding:2px 6px;">Unterbesetzt</span></span>
+      </div>
+
+      <div class="schedule-grid" id="schedule-week-grid"></div>
+      <div id="schedule-warnings"></div>
+    </div>
+
+    <!-- ── Gemini ── -->
+    <div class="page" id="page-gemini">
+      <div class="card">
+        <div class="card-title">🤖 KI-Assistent (Gemini)</div>
+        <p class="text-muted text-sm mb-4">Gemini analysiert den erstellten Schichtplan und gibt Verbesserungsvorschläge. Kein GEMINI_API_KEY? Das Programm funktioniert trotzdem vollständig.</p>
+
+        <div class="flex gap-3 items-center mb-4" style="flex-wrap:wrap;">
+          <div class="form-group" style="flex:0 0 200px;">
+            <label>Woche analysieren (Montag):</label>
+            <input type="date" id="gemini-week-input" />
+          </div>
+          <button class="btn btn-primary" id="btn-gemini-analyze" style="align-self:flex-end;">🔍 Analysieren</button>
+        </div>
+
+        <div id="gemini-result" class="gemini-output" style="display:none;"></div>
+        <div id="gemini-loading" style="display:none;" class="loading"><div class="spinner"></div> Gemini analysiert...</div>
+      </div>
+    </div>
+
+    <!-- ── Settings ── -->
+    <div class="page" id="page-settings">
+      <div class="card">
+        <div class="card-title">⚙️ Betrieb verwalten</div>
+        <div id="settings-business-list"></div>
+        <hr />
+        <h4 class="fw-600 mb-4" style="margin-top:8px;">Neuen Betrieb anlegen</h4>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Name des Betriebs</label>
+            <input type="text" id="new-business-name" placeholder="z.B. Mein Restaurant" />
+          </div>
+          <div class="form-group">
+            <label>Branche</label>
+            <select id="new-business-industry">
+              <option value="restaurant">Restaurant</option>
+              <option value="retail">Einzelhandel</option>
+              <option value="factory">Fabrik</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-create-business">Betrieb anlegen</button>
+      </div>
+    </div>
+
+  </div><!-- /page-content -->
+</div><!-- /main -->
+
+<!-- ── Toast Container ── -->
+<div id="toast-container"></div>
+
+<!-- ── Modal: Employee ── -->
+<div class="modal-overlay" id="modal-employee">
+  <div class="modal">
+    <button class="modal-close" data-close="modal-employee">✕</button>
+    <h3 id="modal-employee-title">Mitarbeiter hinzufügen</h3>
+    <input type="hidden" id="emp-id" />
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Name *</label>
+        <input type="text" id="emp-name" placeholder="Vollständiger Name" />
+      </div>
+      <div class="form-group">
+        <label>Erfahrungslevel</label>
+        <select id="emp-level">
+          <option value="junior">Junior</option>
+          <option value="normal" selected>Normal</option>
+          <option value="senior">Senior</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Ziel-Stunden/Woche</label>
+        <input type="number" id="emp-target" value="40" min="0" max="168" />
+      </div>
+      <div class="form-group">
+        <label>Max. Stunden/Woche</label>
+        <input type="number" id="emp-max" value="48" min="0" max="168" />
+      </div>
+      <div class="form-group">
+        <label>Qualifikationen</label>
+        <input type="text" id="emp-qualifications" placeholder="z.B. HACCP, Erste Hilfe" />
+      </div>
+      <div class="form-group">
+        <label>Freie Tage (Nummern, kommagetrennt)</label>
+        <input type="text" id="emp-days-off" placeholder="z.B. 5,6 für Sa,So" />
+      </div>
+    </div>
+    <div class="form-group mb-4">
+      <label>Rollen</label>
+      <select id="emp-roles" multiple size="4" style="height:90px;"></select>
+      <span class="text-sm text-muted">Strg+Klick für Mehrfachauswahl</span>
+    </div>
+    <div class="form-group mb-4">
+      <label>Bereiche</label>
+      <select id="emp-areas" multiple size="4" style="height:90px;"></select>
+      <span class="text-sm text-muted">Strg+Klick für Mehrfachauswahl</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" data-close="modal-employee">Abbrechen</button>
+      <button class="btn btn-primary" id="btn-save-employee">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal: Availability ── -->
+<div class="modal-overlay" id="modal-availability">
+  <div class="modal">
+    <button class="modal-close" data-close="modal-availability">✕</button>
+    <h3>Verfügbarkeit eintragen</h3>
+    <input type="hidden" id="avail-id" />
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Mitarbeiter *</label>
+        <select id="avail-employee"></select>
+      </div>
+      <div class="form-group">
+        <label>Datum *</label>
+        <input type="date" id="avail-date" />
+      </div>
+      <div class="form-group">
+        <label>Verfügbar?</label>
+        <select id="avail-is-available">
+          <option value="true">Ja</option>
+          <option value="false">Nein</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Verfügbar von</label>
+        <input type="time" id="avail-from" />
+      </div>
+      <div class="form-group">
+        <label>Verfügbar bis</label>
+        <input type="time" id="avail-until" />
+      </div>
+      <div class="form-group">
+        <label>Wunschschicht</label>
+        <input type="text" id="avail-preferred" placeholder="z.B. Früh, Spät" />
+      </div>
+    </div>
+    <div class="form-group mb-4">
+      <label>Kommentar</label>
+      <textarea id="avail-comment" placeholder="Optionale Anmerkungen..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" data-close="modal-availability">Abbrechen</button>
+      <button class="btn btn-primary" id="btn-save-availability">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal: Absence ── -->
+<div class="modal-overlay" id="modal-absence">
+  <div class="modal">
+    <button class="modal-close" data-close="modal-absence">✕</button>
+    <h3>Abwesenheit eintragen</h3>
+    <input type="hidden" id="abs-id" />
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Mitarbeiter *</label>
+        <select id="abs-employee"></select>
+      </div>
+      <div class="form-group">
+        <label>Typ *</label>
+        <select id="abs-type">
+          <option value="vacation">Urlaub</option>
+          <option value="sick">Krankheit</option>
+          <option value="school">Schule/Uni</option>
+          <option value="other">Sonstiges</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Von *</label>
+        <input type="date" id="abs-start" />
+      </div>
+      <div class="form-group">
+        <label>Bis *</label>
+        <input type="date" id="abs-end" />
+      </div>
+      <div class="form-group">
+        <label>Genehmigt</label>
+        <select id="abs-approved">
+          <option value="false">Nein</option>
+          <option value="true">Ja</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group mb-4">
+      <label>Kommentar</label>
+      <textarea id="abs-comment" placeholder="Optionale Anmerkungen..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" data-close="modal-absence">Abbrechen</button>
+      <button class="btn btn-primary" id="btn-save-absence">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal: Shift Requirement ── -->
+<div class="modal-overlay" id="modal-requirement">
+  <div class="modal">
+    <button class="modal-close" data-close="modal-requirement">✕</button>
+    <h3>Schichtanforderung</h3>
+    <input type="hidden" id="req-id" />
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Bereich *</label>
+        <select id="req-area"></select>
+      </div>
+      <div class="form-group">
+        <label>Rolle (optional)</label>
+        <select id="req-role">
+          <option value="">– keine –</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Wochentag</label>
+        <select id="req-weekday">
+          <option value="">– spezifisches Datum –</option>
+          <option value="0">Montag</option>
+          <option value="1">Dienstag</option>
+          <option value="2">Mittwoch</option>
+          <option value="3">Donnerstag</option>
+          <option value="4">Freitag</option>
+          <option value="5">Samstag</option>
+          <option value="6">Sonntag</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Datum (wenn kein Wochentag)</label>
+        <input type="date" id="req-date" />
+      </div>
+      <div class="form-group">
+        <label>Von *</label>
+        <input type="time" id="req-start" />
+      </div>
+      <div class="form-group">
+        <label>Bis *</label>
+        <input type="time" id="req-end" />
+      </div>
+      <div class="form-group">
+        <label>Benötigte Personen *</label>
+        <input type="number" id="req-count" value="1" min="1" max="50" />
+      </div>
+      <div class="form-group">
+        <label>Aktiv</label>
+        <select id="req-active">
+          <option value="true">Ja</option>
+          <option value="false">Nein</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" data-close="modal-requirement">Abbrechen</button>
+      <button class="btn btn-primary" id="btn-save-requirement">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
