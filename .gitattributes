@@ -1,0 +1,6 @@
+# Shell-Skripte muessen Unix-Zeilenenden (LF) behalten,
+# sonst schlaegt die Ausfuehrung auf Mac/Linux fehl.
+*.sh text eol=lf
+
+# Windows-Batchdateien behalten CRLF
+*.bat text eol=crlf
