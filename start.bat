@@ -19,9 +19,10 @@ if not exist ".venv\Scripts\python.exe" (
         pause
         exit /b 1
     )
-    echo [2/2] Installiere Abhaengigkeiten...
-    ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 )
+
+echo Installiere/pruefe Abhaengigkeiten...
+".venv\Scripts\python.exe" -m pip install -r requirements.txt
 
 echo.
 echo Server startet...

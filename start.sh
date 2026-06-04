@@ -28,10 +28,12 @@ fi
 if [ ! -f ".venv/bin/python" ]; then
     echo "[1/2] Erstelle virtuelle Umgebung..."
     "$PY" -m venv .venv
-    echo "[2/2] Installiere Abhaengigkeiten..."
-    ./.venv/bin/python -m pip install --upgrade pip
-    ./.venv/bin/python -m pip install -r requirements.txt
 fi
+
+# Abhaengigkeiten immer pruefen/installieren (schnell, wenn bereits vorhanden)
+echo "[2/2] Installiere/pruefe Abhaengigkeiten..."
+./.venv/bin/python -m pip install --upgrade pip
+./.venv/bin/python -m pip install -r requirements.txt
 
 echo
 echo "Server startet..."
