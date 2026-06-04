@@ -5,7 +5,26 @@ Ersetzt klassische Excel-Schichtpläne durch einen automatischen Algorithmus.
 
 ---
 
-## Schnellstart
+## Schnellstart (am einfachsten)
+
+- **Windows**: Doppelklick auf `start.bat`
+- **Mac / Linux**: Terminal im Projektordner öffnen und eingeben:
+  ```bash
+  chmod +x start.sh   # nur beim ersten Mal nötig
+  ./start.sh
+  ```
+
+Das Skript erstellt automatisch die virtuelle Umgebung, installiert die
+Abhängigkeiten und startet den Server. Danach im Browser öffnen:
+`http://localhost:8000`
+
+> **Mac-Hinweis:** Du kannst `start.sh` nicht einfach doppelklicken – Mac
+> öffnet `.sh`-Dateien standardmäßig im Editor. Starte es über das Terminal
+> (siehe oben). Alternativ die manuelle Installation unten verwenden.
+
+---
+
+## Manuelle Installation
 
 ### 1. Voraussetzungen
 
