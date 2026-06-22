@@ -3,6 +3,7 @@ from sqlalchemy import (
     ForeignKey, Text, Enum as SAEnum
 )
 from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy.ext.associationproxy import association_proxy
 from datetime import datetime
 import enum
 
@@ -13,6 +14,8 @@ class IndustryType(str, enum.Enum):
     restaurant = "restaurant"
     retail = "retail"
     factory = "factory"
+    logistics = "logistics"
+    automotive = "automotive"
 
 
 class ExperienceLevel(str, enum.Enum):
@@ -98,9 +101,13 @@ class Employee(Base):
     business = relationship("Business", back_populates="employees")
     employee_roles = relationship("EmployeeRole", back_populates="employee", cascade="all, delete-orphan")
     employee_areas = relationship("EmployeeArea", back_populates="employee", cascade="all, delete-orphan")
+    # Direkter Zugriff auf die verknuepften Role-/Area-Objekte (fuer das EmployeeOut-Schema)
+    roles = association_proxy("employee_roles", "role")
+    areas = association_proxy("employee_areas", "area")
     availabilities = relationship("Availability", back_populates="employee", cascade="all, delete-orphan")
     absences = relationship("Absence", back_populates="employee", cascade="all, delete-orphan")
-    shift_assignments = relationship("ShiftAssignment", back_populates="employee")
+    # Beim Löschen eines Mitarbeiters auch seine Schichtzuweisungen entfernen
+    shift_assignments = relationship("ShiftAssignment", back_populates="employee", cascade="all, delete-orphan")
 
 
 class EmployeeRole(Base):
@@ -161,9 +168,13 @@ class ShiftRequirement(Base):
     business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False)
     area_id = Column(Integer, ForeignKey("areas.id"), nullable=False)
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=True)
-    # Either a specific date or a recurring weekday (0=Monday)
+    # Either a specific date, a recurring weekday (0=Monday), or daily (is_daily)
     specific_date = Column(Date, nullable=True)
     weekday = Column(Integer, nullable=True)
+    is_daily = Column(Boolean, default=False)  # gilt für jeden Wochentag
+    # Optionaler Gültigkeitszeitraum für wiederkehrende Anforderungen
+    valid_from = Column(Date, nullable=True)
+    valid_until = Column(Date, nullable=True)
     start_time = Column(Time, nullable=False)
     end_time = Column(Time, nullable=False)
     required_count = Column(Integer, default=1)

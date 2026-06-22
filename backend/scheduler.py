@@ -36,11 +36,31 @@ def _time_to_hours(t: time) -> float:
 
 
 def _shift_duration(start: time, end: time) -> float:
-    return _time_to_hours(end) - _time_to_hours(start)
+    """Dauer in Stunden. Wenn end <= start, laeuft die Schicht ueber Mitternacht."""
+    s = _time_to_hours(start)
+    e = _time_to_hours(end)
+    if e <= s:
+        e += 24  # Schicht endet am Folgetag (z.B. 18:00-02:00)
+    return e - s
+
+
+def _shift_datetimes(d: date, start: time, end: time) -> Tuple[datetime, datetime]:
+    """Wandelt Datum + Start/Endzeit in echte Start-/End-Zeitpunkte um.
+    Bei Schichten ueber Mitternacht liegt das Ende am Folgetag."""
+    start_dt = datetime.combine(d, start)
+    end_dt = datetime.combine(d, end)
+    if end_dt <= start_dt:
+        end_dt += timedelta(days=1)
+    return start_dt, end_dt
 
 
 def _times_overlap(s1: time, e1: time, s2: time, e2: time) -> bool:
     """Return True if two time intervals overlap (exclusive boundaries)."""
+    return s1 < e2 and s2 < e1
+
+
+def _datetimes_overlap(s1: datetime, e1: datetime, s2: datetime, e2: datetime) -> bool:
+    """True, wenn sich zwei Zeitraeume ueberschneiden (auch ueber Mitternacht)."""
     return s1 < e2 and s2 < e1
 
 
@@ -71,7 +91,9 @@ def _is_available_for_shift(employee: models.Employee, check_date: date, start: 
         if not avail.is_available:
             return False, "Als nicht verfügbar eingetragen"
         if avail.available_from and avail.available_until:
-            if not _times_overlap(avail.available_from, avail.available_until, start, end):
+            # Bei Schichten ueber Mitternacht nur den Teil bis Mitternacht pruefen
+            seg_end = end if _time_to_hours(end) > _time_to_hours(start) else time(23, 59)
+            if not _times_overlap(avail.available_from, avail.available_until, start, seg_end):
                 return (
                     False,
                     f"Nur {avail.available_from.strftime('%H:%M')}–{avail.available_until.strftime('%H:%M')} verfügbar",
@@ -125,17 +147,33 @@ def generate_schedule(db: Session, business_id: int, week_start: date) -> Dict:
     # Track weekly hours per employee: {employee_id: hours}
     weekly_hours: Dict[int, float] = {emp.id: 0.0 for emp in employees}
 
-    # Track daily assignments per employee: {employee_id: [(date, start_time, end_time)]}
-    daily_assignments: Dict[int, List[Tuple[date, time, time]]] = {emp.id: [] for emp in employees}
+    # Track assignments per employee as real datetime ranges (handles overnight shifts)
+    # {employee_id: [(start_dt, end_dt)]}
+    daily_assignments: Dict[int, List[Tuple[datetime, datetime]]] = {emp.id: [] for emp in employees}
 
     # Expand requirements into concrete dates for the week
+    def _in_range(d: date) -> bool:
+        """Prüft optionalen Gültigkeitszeitraum der Anforderung."""
+        if getattr(req, "valid_from", None) and d < req.valid_from:
+            return False
+        if getattr(req, "valid_until", None) and d > req.valid_until:
+            return False
+        return True
+
     concrete_reqs = []
     for req in requirements:
         if req.specific_date and week_start <= req.specific_date <= week_end:
             concrete_reqs.append((req.specific_date, req))
+        elif getattr(req, "is_daily", False):
+            # Gilt für jeden Tag der Woche (innerhalb des optionalen Zeitraums)
+            for offset in range(7):
+                d = week_start + timedelta(days=offset)
+                if _in_range(d):
+                    concrete_reqs.append((d, req))
         elif req.weekday is not None:
             target_date = week_start + timedelta(days=req.weekday)
-            concrete_reqs.append((target_date, req))
+            if _in_range(target_date):
+                concrete_reqs.append((target_date, req))
 
     # Sort by date, then start_time — process earlier shifts first
     concrete_reqs.sort(key=lambda x: (x[0], x[1].start_time))
@@ -147,6 +185,7 @@ def generate_schedule(db: Session, business_id: int, week_start: date) -> Dict:
 
     for req_date, req in concrete_reqs:
         duration = _shift_duration(req.start_time, req.end_time)
+        req_start_dt, req_end_dt = _shift_datetimes(req_date, req.start_time, req.end_time)
 
         # Find eligible employees for this requirement
         candidates = []
@@ -175,10 +214,10 @@ def generate_schedule(db: Session, business_id: int, week_start: date) -> Dict:
                 rejection_reasons[reason] = rejection_reasons.get(reason, 0) + 1
                 continue
 
-            # Check for time conflicts on this day
+            # Check for time conflicts (with real datetimes, also across midnight)
             has_conflict = False
-            for (assigned_date, a_start, a_end) in daily_assignments[emp.id]:
-                if assigned_date == req_date and _times_overlap(a_start, a_end, req.start_time, req.end_time):
+            for (a_start_dt, a_end_dt) in daily_assignments[emp.id]:
+                if _datetimes_overlap(a_start_dt, a_end_dt, req_start_dt, req_end_dt):
                     has_conflict = True
                     break
             if has_conflict:
@@ -205,7 +244,7 @@ def generate_schedule(db: Session, business_id: int, week_start: date) -> Dict:
         assigned_count = 0
         for emp in candidates[:req.required_count]:
             weekly_hours[emp.id] += duration
-            daily_assignments[emp.id].append((req_date, req.start_time, req.end_time))
+            daily_assignments[emp.id].append((req_start_dt, req_end_dt))
             assigned_count += 1
 
         is_understaffed = assigned_count < req.required_count

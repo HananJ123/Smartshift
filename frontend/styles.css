@@ -379,6 +379,168 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 .shift-card .shift-staff { color: var(--gray-500); font-size: 11px; margin-top: 2px; }
 .shift-card .shift-warn { color: var(--danger); font-size: 10.5px; margin-top: 3px; }
 
+/* ── Roster-Matrix (Mitarbeiter × Wochentag) ── */
+.roster-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--gray-200); }
+
+.roster-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  background: #fff;
+}
+
+.roster-table thead th {
+  background: var(--primary);
+  color: #fff;
+  text-align: center;
+  padding: 8px 6px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  border: none;
+  white-space: nowrap;
+}
+
+.roster-table thead th.today-col { background: var(--success); }
+.roster-table thead th.emp-col { text-align: left; padding-left: 12px; min-width: 130px; }
+.roster-table thead th.sum-col { background: var(--primary-dark); }
+.roster-table .day-date { font-weight: 400; font-size: 11px; opacity: .85; }
+
+.roster-table td {
+  border: 1px solid var(--gray-100);
+  padding: 6px;
+  vertical-align: top;
+  min-width: 92px;
+}
+
+.roster-table td.emp-name {
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--gray-50);
+  vertical-align: middle;
+}
+
+.roster-table .emp-meta { font-weight: 400; }
+.roster-table td.today-col-cell { background: #f0fdf4; }
+
+.roster-chip {
+  display: block;
+  background: var(--primary-light);
+  border-left: 3px solid var(--primary);
+  border-radius: 4px;
+  padding: 3px 6px;
+  margin-bottom: 4px;
+  line-height: 1.25;
+  font-weight: 600;
+  color: var(--primary-dark);
+}
+
+.roster-chip:last-child { margin-bottom: 0; }
+.roster-chip small { font-weight: 400; color: var(--gray-700); }
+
+.roster-chip.understaffed {
+  background: var(--danger-light);
+  border-left-color: var(--danger);
+  color: var(--danger);
+}
+
+.roster-free { color: var(--gray-300); font-size: 11px; }
+
+.roster-hours {
+  text-align: center;
+  font-weight: 700;
+  vertical-align: middle;
+  background: var(--gray-50);
+  white-space: nowrap;
+}
+.roster-hours.over { color: var(--danger); }
+.roster-hours .hours-target { font-weight: 400; font-size: 10.5px; color: var(--gray-500); }
+
+/* ── Dashboard Erweiterungen ── */
+.dash-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.util-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.util-row .util-name { width: 70px; font-weight: 500; flex-shrink: 0; }
+.util-bar-track {
+  flex: 1;
+  background: var(--gray-100);
+  border-radius: 99px;
+  height: 14px;
+  overflow: hidden;
+  position: relative;
+}
+.util-bar-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 99px;
+  transition: width .3s;
+}
+.util-bar-fill.full { background: var(--success); }
+.util-bar-fill.over { background: var(--danger); }
+.util-row .util-val { width: 78px; text-align: right; color: var(--gray-500); flex-shrink: 0; font-size: 12px; }
+
+.coverage-ring {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* ── Anforderungs-Kalender ── */
+.req-cal-table td { min-width: 120px; }
+
+.req-chip {
+  position: relative;
+  background: var(--primary-light);
+  border-left: 3px solid var(--primary);
+  border-radius: 5px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: box-shadow .15s, transform .1s;
+}
+.req-chip:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.req-chip:last-child { margin-bottom: 0; }
+.req-chip-time { font-weight: 700; color: var(--primary-dark); font-size: 12px; }
+.req-chip-area { color: var(--gray-700); font-size: 11.5px; margin-top: 1px; }
+.req-chip-count { color: var(--gray-500); font-size: 11px; margin-top: 2px; }
+
+.req-chip { padding-right: 28px; }  /* Platz für den Löschen-Button */
+
+.req-chip-del {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 22px; height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  color: var(--gray-500);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+  z-index: 2;
+}
+.req-chip-del:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+.req-onetime-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
 /* ── Modals ── */
 .modal-overlay {
   display: none;

@@ -195,15 +195,20 @@ class ShiftRequirementCreate(BaseModel):
     role_id: Optional[int] = None
     specific_date: Optional[date] = None
     weekday: Optional[int] = Field(None, ge=0, le=6)
+    is_daily: bool = False
+    valid_from: Optional[date] = None
+    valid_until: Optional[date] = None
     start_time: time
     end_time: time
     required_count: int = Field(1, ge=1, le=50)
     is_active: bool = True
 
     @validator("end_time")
-    def end_after_start(cls, v, values):
-        if "start_time" in values and v <= values["start_time"]:
-            raise ValueError("end_time must be after start_time")
+    def end_not_equal_start(cls, v, values):
+        # end < start ist erlaubt (Schicht ueber Mitternacht, z.B. 18:00-02:00).
+        # Nur exakt gleich ist ungueltig (Dauer 0).
+        if "start_time" in values and v == values["start_time"]:
+            raise ValueError("Start- und Endzeit duerfen nicht identisch sein")
         return v
 
 
@@ -212,6 +217,9 @@ class ShiftRequirementUpdate(BaseModel):
     role_id: Optional[int] = None
     specific_date: Optional[date] = None
     weekday: Optional[int] = Field(None, ge=0, le=6)
+    is_daily: Optional[bool] = None
+    valid_from: Optional[date] = None
+    valid_until: Optional[date] = None
     start_time: Optional[time] = None
     end_time: Optional[time] = None
     required_count: Optional[int] = Field(None, ge=1, le=50)
@@ -225,6 +233,9 @@ class ShiftRequirementOut(BaseModel):
     role_id: Optional[int]
     specific_date: Optional[date]
     weekday: Optional[int]
+    is_daily: bool = False
+    valid_from: Optional[date] = None
+    valid_until: Optional[date] = None
     start_time: time
     end_time: time
     required_count: int

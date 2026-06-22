@@ -78,6 +78,14 @@
           <div class="stat-icon red">⚠️</div>
           <div class="stat-info"><p>Unterbesetzte Schichten</p><h3 id="stat-understaffed">–</h3></div>
         </div>
+        <div class="stat-card">
+          <div class="stat-icon green">📈</div>
+          <div class="stat-info"><p>Abdeckung diese Woche</p><h3 id="stat-coverage">–</h3></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon purple">⏱️</div>
+          <div class="stat-info"><p>Geplante Stunden</p><h3 id="stat-hours">–</h3></div>
+        </div>
       </div>
 
       <div class="card">
@@ -92,6 +100,17 @@
       <div class="card">
         <div class="card-title">📊 Aktuelle Woche – Übersicht</div>
         <div id="dashboard-schedule-preview"></div>
+      </div>
+
+      <div class="dash-cols">
+        <div class="card">
+          <div class="card-title">⚖️ Team-Auslastung diese Woche</div>
+          <div id="dash-utilization"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">🏖️ Anstehende Abwesenheiten</div>
+          <div id="dash-absences"></div>
+        </div>
       </div>
     </div>
 
@@ -189,25 +208,9 @@
         <h3 class="fw-600">Schichtanforderungen</h3>
         <button class="btn btn-primary" id="btn-add-requirement">+ Anforderung hinzufügen</button>
       </div>
-      <div class="card">
-        <div class="table-wrapper">
-          <table id="req-table">
-            <thead>
-              <tr>
-                <th>Wochentag / Datum</th>
-                <th>Bereich</th>
-                <th>Rolle</th>
-                <th>Von</th>
-                <th>Bis</th>
-                <th>Anzahl</th>
-                <th>Aktiv</th>
-                <th>Aktionen</th>
-              </tr>
-            </thead>
-            <tbody id="req-tbody"></tbody>
-          </table>
-        </div>
-      </div>
+      <p class="text-muted text-sm mb-4">Wochenübersicht der benötigten Schichten. Klicke auf eine Schicht zum Bearbeiten.</p>
+      <div id="req-calendar"></div>
+      <div id="req-onetime"></div>
     </div>
 
     <!-- ── Schedule ── -->
@@ -275,9 +278,11 @@
           <div class="form-group">
             <label>Branche</label>
             <select id="new-business-industry">
-              <option value="restaurant">Restaurant</option>
+              <option value="restaurant">Restaurant / Gastronomie</option>
               <option value="retail">Einzelhandel</option>
-              <option value="factory">Fabrik</option>
+              <option value="factory">Produktion / Fabrik</option>
+              <option value="logistics">Logistik / Transport</option>
+              <option value="automotive">Werkstatt / Autohaus</option>
             </select>
           </div>
         </div>
@@ -368,11 +373,11 @@
       </div>
       <div class="form-group">
         <label>Verfügbar von</label>
-        <input type="time" id="avail-from" />
+        <select id="avail-from" class="time-select"></select>
       </div>
       <div class="form-group">
         <label>Verfügbar bis</label>
-        <input type="time" id="avail-until" />
+        <select id="avail-until" class="time-select"></select>
       </div>
       <div class="form-group">
         <label>Wunschschicht</label>
@@ -455,9 +460,9 @@
         </select>
       </div>
       <div class="form-group">
-        <label>Wochentag</label>
+        <label>Wiederholung</label>
         <select id="req-weekday">
-          <option value="">– spezifisches Datum –</option>
+          <option value="daily">Jeden Tag (Mo–So)</option>
           <option value="0">Montag</option>
           <option value="1">Dienstag</option>
           <option value="2">Mittwoch</option>
@@ -465,19 +470,28 @@
           <option value="4">Freitag</option>
           <option value="5">Samstag</option>
           <option value="6">Sonntag</option>
+          <option value="">– einmalig (festes Datum) –</option>
         </select>
       </div>
       <div class="form-group">
-        <label>Datum (wenn kein Wochentag)</label>
+        <label>Datum (nur bei „einmalig")</label>
         <input type="date" id="req-date" />
       </div>
       <div class="form-group">
-        <label>Von *</label>
-        <input type="time" id="req-start" />
+        <label>Gültig ab <span class="text-muted" style="font-weight:400;">(optional)</span></label>
+        <input type="date" id="req-valid-from" />
       </div>
       <div class="form-group">
-        <label>Bis *</label>
-        <input type="time" id="req-end" />
+        <label>Gültig bis <span class="text-muted" style="font-weight:400;">(optional)</span></label>
+        <input type="date" id="req-valid-until" />
+      </div>
+      <div class="form-group">
+        <label>Von *</label>
+        <select id="req-start" class="time-select"></select>
+      </div>
+      <div class="form-group">
+        <label>Bis * <span class="text-muted" style="font-weight:400;">(früher = über Mitternacht)</span></label>
+        <select id="req-end" class="time-select"></select>
       </div>
       <div class="form-group">
         <label>Benötigte Personen *</label>

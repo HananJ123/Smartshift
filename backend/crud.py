@@ -36,11 +36,15 @@ def create_business(db: Session, data: schemas.BusinessCreate) -> models.Busines
         models.IndustryType.restaurant: ["Service", "Küche", "Bar", "Kasse"],
         models.IndustryType.retail: ["Kasse", "Verkauf", "Lager", "Warenannahme"],
         models.IndustryType.factory: ["Produktion", "Verpackung", "Lager", "Qualitätskontrolle"],
+        models.IndustryType.logistics: ["Disposition", "Fuhrpark", "Lager", "Verladung"],
+        models.IndustryType.automotive: ["Werkstatt", "Verkauf", "Ersatzteile", "Serviceannahme"],
     }
     default_roles = {
         models.IndustryType.restaurant: ["Kellner", "Koch", "Barkeeper", "Kassierer"],
         models.IndustryType.retail: ["Kassierer", "Verkäufer", "Lagerist", "Filialleiter"],
         models.IndustryType.factory: ["Maschinenführer", "Verpacker", "Lagerist", "QS-Prüfer"],
+        models.IndustryType.logistics: ["Disponent", "LKW-Fahrer", "Lagerist", "Verlader"],
+        models.IndustryType.automotive: ["KFZ-Mechatroniker", "Verkäufer", "Serviceberater", "Lagerist"],
     }
 
     for area_name in default_areas.get(data.industry, []):

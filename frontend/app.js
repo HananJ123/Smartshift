@@ -54,6 +54,44 @@ const LEVEL_BADGES = {
   senior: '<span class="badge badge-purple">Senior</span>',
 };
 
+// ── 24h-Zeit-Dropdowns (europäisches Format, kein AM/PM) ─────────────────────
+
+// Erzeugt Optionen 00:00 .. 23:30 in 30-Minuten-Schritten
+function buildTimeOptions() {
+  const opts = [];
+  for (let h = 0; h < 24; h++) {
+    for (let m = 0; m < 60; m += 30) {
+      const v = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      opts.push(v);
+    }
+  }
+  return opts;
+}
+
+// Füllt alle <select class="time-select"> mit 24h-Zeiten
+function populateTimeSelects() {
+  const opts = buildTimeOptions();
+  document.querySelectorAll('select.time-select').forEach(sel => {
+    if (sel.dataset.filled) return;
+    sel.innerHTML = opts.map(v => `<option value="${v}">${v}</option>`).join('');
+    sel.dataset.filled = '1';
+  });
+}
+
+// Setzt den Wert eines Zeit-Dropdowns; fügt den Wert hinzu, falls er nicht im Raster liegt
+function setTimeSelect(id, value) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const v = (value || '').slice(0, 5);
+  if (v && !Array.from(sel.options).some(o => o.value === v)) {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    sel.appendChild(opt);
+  }
+  sel.value = v;
+}
+
 async function api(method, path, body) {
   const opts = {
     method,
@@ -85,9 +123,9 @@ function closeModal(id) {
   document.getElementById(id).classList.remove('open');
 }
 
-function confirm(msg) {
-  return window.confirm(msg);
-}
+// Hinweis: KEINE eigene confirm()-Funktion definieren! Eine Funktion namens
+// "confirm" würde das eingebaute window.confirm überschreiben und sich selbst
+// endlos aufrufen. Wir verwenden direkt das native confirm().
 
 // ── Navigation ──────────────────────────────────────────────────────────────────
 
@@ -186,7 +224,7 @@ function renderSettingsPage() {
     el.innerHTML = '<p class="text-muted text-sm">Noch keine Betriebe angelegt.</p>';
     return;
   }
-  const industryLabels = { restaurant: '🍽️ Restaurant', retail: '🛒 Einzelhandel', factory: '🏭 Fabrik' };
+  const industryLabels = { restaurant: '🍽️ Restaurant', retail: '🛒 Einzelhandel', factory: '🏭 Fabrik', logistics: '🚚 Logistik', automotive: '🔧 Werkstatt/Autohaus' };
   el.innerHTML = `<table><thead><tr><th>Name</th><th>Branche</th><th>Aktionen</th></tr></thead><tbody>
     ${state.businesses.map(b => `
       <tr>
@@ -229,20 +267,43 @@ async function loadDashboard() {
   const weekISO = fmtDateISO(state.currentWeekStart);
 
   try {
-    const [shifts] = await Promise.all([
+    const [shifts, reqs, absences] = await Promise.all([
       api('GET', `/api/businesses/${state.businessId}/schedule?week_start=${weekISO}`),
+      api('GET', `/api/businesses/${state.businessId}/shift-requirements`),
+      api('GET', `/api/businesses/${state.businessId}/absences`),
     ]);
 
-    document.getElementById('stat-employees').textContent = state.employees.filter(e => e.is_active).length;
-    document.getElementById('stat-requirements').textContent = '–';
-    api('GET', `/api/businesses/${state.businessId}/shift-requirements`).then(reqs => {
-      document.getElementById('stat-requirements').textContent = reqs.length;
+    const understaffed = shifts.filter(s => s.is_understaffed);
+
+    // Stunden pro Mitarbeiter + Gesamtstunden berechnen
+    const empHours = {};
+    let totalHours = 0;
+    state.employees.forEach(e => { empHours[e.id] = 0; });
+    shifts.forEach(s => {
+      const dur = shiftHours(s.start_time?.slice(0,5), s.end_time?.slice(0,5));
+      s.assignments.forEach(a => {
+        if (empHours[a.employee_id] !== undefined) empHours[a.employee_id] += dur;
+        totalHours += dur;
+      });
     });
+
+    // Abdeckung in % (zugeteilte / benötigte Plätze)
+    const reqSum = shifts.reduce((acc, s) => acc + s.required_count, 0);
+    const assignedSum = shifts.reduce((acc, s) => acc + s.assigned_count, 0);
+    const coverage = reqSum > 0 ? Math.round((assignedSum / reqSum) * 100) : 0;
+
+    document.getElementById('stat-employees').textContent = state.employees.filter(e => e.is_active).length;
+    document.getElementById('stat-requirements').textContent = reqs.length;
     document.getElementById('stat-shifts').textContent = shifts.length;
-    document.getElementById('stat-understaffed').textContent = shifts.filter(s => s.is_understaffed).length;
+    document.getElementById('stat-understaffed').textContent = understaffed.length;
+    document.getElementById('stat-coverage').textContent = shifts.length > 0 ? coverage + '%' : '–';
+    document.getElementById('stat-hours').textContent = shifts.length > 0 ? totalHours.toFixed(0) + 'h' : '–';
 
     document.getElementById('dash-week-info').textContent =
       `Aktuelle Woche: ${fmtDate(state.currentWeekStart)} – ${fmtDate(new Date(state.currentWeekStart.getTime() + 6 * 86400000))} (KW ${isoWeek(state.currentWeekStart)})`;
+
+    renderUtilization(empHours, shifts.length > 0);
+    renderUpcomingAbsences(absences);
 
     // Mini schedule preview
     const preview = document.getElementById('dashboard-schedule-preview');
@@ -251,7 +312,6 @@ async function loadDashboard() {
       return;
     }
 
-    const understaffed = shifts.filter(s => s.is_understaffed);
     preview.innerHTML = `
       <div class="flex gap-3 mb-4" style="flex-wrap:wrap;">
         <div><b>${shifts.length}</b> Schichten geplant</div>
@@ -274,6 +334,59 @@ async function loadDashboard() {
   } catch (e) {
     console.error(e);
   }
+}
+
+// Team-Auslastung als Balken (Stunden vs. Zielstunden)
+function renderUtilization(empHours, hasPlan) {
+  const el = document.getElementById('dash-utilization');
+  const emps = state.employees.filter(e => e.is_active);
+  if (emps.length === 0) {
+    el.innerHTML = '<p class="text-muted text-sm">Keine Mitarbeiter angelegt.</p>';
+    return;
+  }
+  if (!hasPlan) {
+    el.innerHTML = '<p class="text-muted text-sm">Noch kein Plan erstellt – erstelle einen Wochenplan, um die Auslastung zu sehen.</p>';
+    return;
+  }
+  el.innerHTML = emps.map(e => {
+    const h = empHours[e.id] || 0;
+    const target = e.target_hours_per_week || 0;
+    const max = e.max_hours_per_week || target || 1;
+    const pct = Math.min(100, Math.round((h / max) * 100));
+    let cls = '';
+    if (target && h >= target) cls = 'full';
+    if (max && h > max) cls = 'over';
+    return `
+      <div class="util-row">
+        <span class="util-name">${e.name}</span>
+        <span class="util-bar-track"><span class="util-bar-fill ${cls}" style="width:${pct}%"></span></span>
+        <span class="util-val">${h.toFixed(1)} / ${target}h</span>
+      </div>`;
+  }).join('');
+}
+
+// Anstehende Abwesenheiten (ab heute)
+function renderUpcomingAbsences(absences) {
+  const el = document.getElementById('dash-absences');
+  const todayISO = fmtDateISO(new Date());
+  const upcoming = absences
+    .filter(a => a.end_date >= todayISO)
+    .sort((a, b) => a.start_date.localeCompare(b.start_date))
+    .slice(0, 6);
+  if (upcoming.length === 0) {
+    el.innerHTML = '<p class="text-muted text-sm">Keine anstehenden Abwesenheiten. 🎉</p>';
+    return;
+  }
+  const typeColors = { vacation: 'badge-blue', sick: 'badge-red', school: 'badge-orange', other: 'badge-gray' };
+  el.innerHTML = upcoming.map(a => {
+    const emp = state.employees.find(e => e.id === a.employee_id);
+    return `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px;">
+        <span class="badge ${typeColors[a.absence_type] || 'badge-gray'}">${ABSENCE_LABELS[a.absence_type]}</span>
+        <b>${emp?.name || a.employee_id}</b>
+        <span class="text-muted">${fmtDate(a.start_date)} – ${fmtDate(a.end_date)}</span>
+      </div>`;
+  }).join('');
 }
 
 document.getElementById('dash-generate-btn').addEventListener('click', () => generateSchedule());
@@ -450,8 +563,8 @@ document.getElementById('btn-add-availability').addEventListener('click', () => 
   document.getElementById('avail-id').value = '';
   document.getElementById('avail-date').value = fmtDateISO(new Date());
   document.getElementById('avail-is-available').value = 'true';
-  document.getElementById('avail-from').value = '09:00';
-  document.getElementById('avail-until').value = '22:00';
+  setTimeSelect('avail-from', '09:00');
+  setTimeSelect('avail-until', '22:00');
   document.getElementById('avail-preferred').value = '';
   document.getElementById('avail-comment').value = '';
   populateEmployeeSelect('avail-employee');
@@ -594,50 +707,96 @@ function populateAreaRoleSelects() {
   const roleSel = document.getElementById('req-role');
   roleSel.innerHTML = '<option value="">– keine –</option>' +
     state.roles.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+}
 
-  // Schedule filter selects
+// Schedule-Filter befüllen OHNE die aktuelle Auswahl zu verlieren (Fix für Filter-Bug)
+function populateScheduleFilters() {
   const sfArea = document.getElementById('schedule-filter-area');
+  const curArea = sfArea.value;
   sfArea.innerHTML = '<option value="">Alle</option>' +
     state.areas.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+  sfArea.value = curArea;
+
   const sfEmp = document.getElementById('schedule-filter-emp');
+  const curEmp = sfEmp.value;
   sfEmp.innerHTML = '<option value="">Alle</option>' +
     state.employees.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+  sfEmp.value = curEmp;
+}
+
+function reqChip(r) {
+  const opacity = r.is_active ? '' : 'opacity:.45;';
+  const rangeNote = (r.valid_from || r.valid_until)
+    ? `<br><small style="color:var(--gray-500);">${r.valid_from ? fmtDate(r.valid_from) : '…'} – ${r.valid_until ? fmtDate(r.valid_until) : '…'}</small>`
+    : '';
+  return `
+    <div class="req-chip" style="${opacity}" onclick="editRequirement(${r.id})" title="Bearbeiten">
+      <button class="req-chip-del" onclick="event.stopPropagation();deleteRequirement(${r.id})" title="Löschen">✕</button>
+      <div class="req-chip-time">${r.start_time?.slice(0,5)}–${r.end_time?.slice(0,5)}</div>
+      <div class="req-chip-area">${r.area?.name || '–'}${r.role ? ` · ${r.role.name}` : ''}</div>
+      <div class="req-chip-count">👤 ${r.required_count} Pers.${r.is_daily ? ' · täglich' : ''}</div>
+      ${rangeNote}
+    </div>`;
 }
 
 function renderRequirementsTable(reqs) {
-  const tbody = document.getElementById('req-tbody');
+  const cal = document.getElementById('req-calendar');
+  const onetimeEl = document.getElementById('req-onetime');
+
   if (reqs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="icon">📋</div><p>Noch keine Schichtanforderungen.</p></div></td></tr>';
+    cal.innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>Noch keine Schichtanforderungen.<br>Klicke auf „+ Anforderung hinzufügen".</p></div>';
+    onetimeEl.innerHTML = '';
     return;
   }
-  tbody.innerHTML = reqs.map(r => {
-    const dayLabel = r.weekday !== null && r.weekday !== undefined
-      ? WEEKDAYS_DE[r.weekday]
-      : (r.specific_date ? fmtDate(r.specific_date) : '–');
-    return `
-      <tr>
-        <td>${dayLabel}</td>
-        <td><span class="badge badge-blue">${r.area?.name || '–'}</span></td>
-        <td>${r.role ? `<span class="badge badge-gray">${r.role.name}</span>` : '–'}</td>
-        <td>${r.start_time?.slice(0,5)}</td>
-        <td>${r.end_time?.slice(0,5)}</td>
-        <td><b>${r.required_count}</b> Pers.</td>
-        <td>${r.is_active ? '<span class="badge badge-green">Aktiv</span>' : '<span class="badge badge-red">Inaktiv</span>'}</td>
-        <td>
-          <button class="btn btn-ghost btn-sm" onclick="editRequirement(${r.id})">✏️</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteRequirement(${r.id})">🗑️</button>
-        </td>
-      </tr>
-    `;
-  }).join('');
+
+  // Wochentag-basierte + tägliche Anforderungen in 7 Spalten
+  const byDay = Array.from({ length: 7 }, () => []);
+  const onetime = [];
+  reqs.forEach(r => {
+    if (r.specific_date) {
+      onetime.push(r);
+    } else if (r.is_daily) {
+      for (let i = 0; i < 7; i++) byDay[i].push(r);
+    } else if (r.weekday !== null && r.weekday !== undefined) {
+      byDay[r.weekday].push(r);
+    }
+  });
+
+  // nach Startzeit sortieren
+  byDay.forEach(list => list.sort((a, b) => (a.start_time || '').localeCompare(b.start_time || '')));
+
+  let head = '';
+  let body = '';
+  for (let i = 0; i < 7; i++) {
+    head += `<th>${WEEKDAYS_DE[i]}</th>`;
+    body += `<td>${byDay[i].map(reqChip).join('') || '<span class="roster-free">–</span>'}</td>`;
+  }
+
+  cal.innerHTML = `<div class="roster-wrap"><table class="roster-table req-cal-table">
+    <thead><tr>${head}</tr></thead><tbody><tr>${body}</tr></tbody></table></div>`;
+
+  // Einmalige Termine als Liste
+  if (onetime.length > 0) {
+    onetime.sort((a, b) => (a.specific_date || '').localeCompare(b.specific_date || ''));
+    onetimeEl.innerHTML = `<div class="card" style="margin-top:20px;">
+      <div class="card-title">📌 Einmalige Termine</div>
+      <div class="req-onetime-grid">
+        ${onetime.map(r => `<div><b>${fmtDate(r.specific_date)}</b> (${WEEKDAYS_DE[new Date(r.specific_date + 'T00:00:00').getDay() === 0 ? 6 : new Date(r.specific_date + 'T00:00:00').getDay() - 1]})${reqChip(r)}</div>`).join('')}
+      </div>
+    </div>`;
+  } else {
+    onetimeEl.innerHTML = '';
+  }
 }
 
 document.getElementById('btn-add-requirement').addEventListener('click', () => {
   document.getElementById('req-id').value = '';
-  document.getElementById('req-weekday').value = '0';
+  document.getElementById('req-weekday').value = 'daily';
   document.getElementById('req-date').value = '';
-  document.getElementById('req-start').value = '10:00';
-  document.getElementById('req-end').value = '15:00';
+  document.getElementById('req-valid-from').value = '';
+  document.getElementById('req-valid-until').value = '';
+  setTimeSelect('req-start', '10:00');
+  setTimeSelect('req-end', '15:00');
   document.getElementById('req-count').value = '1';
   document.getElementById('req-active').value = 'true';
   populateAreaRoleSelects();
@@ -652,10 +811,13 @@ async function editRequirement(id) {
   document.getElementById('req-id').value = r.id;
   document.getElementById('req-area').value = r.area_id;
   document.getElementById('req-role').value = r.role_id || '';
-  document.getElementById('req-weekday').value = r.weekday !== null && r.weekday !== undefined ? r.weekday : '';
+  document.getElementById('req-weekday').value = r.is_daily ? 'daily'
+    : (r.weekday !== null && r.weekday !== undefined ? r.weekday : '');
   document.getElementById('req-date').value = r.specific_date || '';
-  document.getElementById('req-start').value = r.start_time?.slice(0,5) || '';
-  document.getElementById('req-end').value = r.end_time?.slice(0,5) || '';
+  document.getElementById('req-valid-from').value = r.valid_from || '';
+  document.getElementById('req-valid-until').value = r.valid_until || '';
+  setTimeSelect('req-start', r.start_time || '');
+  setTimeSelect('req-end', r.end_time || '');
   document.getElementById('req-count').value = r.required_count;
   document.getElementById('req-active').value = String(r.is_active);
   openModal('modal-requirement');
@@ -667,17 +829,24 @@ document.getElementById('btn-save-requirement').addEventListener('click', async 
   const start = document.getElementById('req-start').value;
   const end = document.getElementById('req-end').value;
   if (!areaId || !start || !end) { toast('Bereich, Start- und Endzeit sind Pflichtfelder', 'error'); return; }
-  if (end <= start) { toast('Endzeit muss nach Startzeit liegen', 'error'); return; }
+  if (end === start) { toast('Start- und Endzeit dürfen nicht identisch sein', 'error'); return; }
 
   const weekdayVal = document.getElementById('req-weekday').value;
   const dateVal = document.getElementById('req-date').value;
   const roleVal = document.getElementById('req-role').value;
+  const isDaily = weekdayVal === 'daily';
+  const isSpecificDate = weekdayVal === '';
+
+  if (isSpecificDate && !dateVal) { toast('Bitte ein Datum wählen oder eine Wiederholung auswählen', 'error'); return; }
 
   const payload = {
     area_id: parseInt(areaId),
     role_id: roleVal ? parseInt(roleVal) : null,
-    weekday: weekdayVal !== '' ? parseInt(weekdayVal) : null,
-    specific_date: !weekdayVal && dateVal ? dateVal : null,
+    is_daily: isDaily,
+    weekday: (!isDaily && !isSpecificDate) ? parseInt(weekdayVal) : null,
+    specific_date: isSpecificDate && dateVal ? dateVal : null,
+    valid_from: !isSpecificDate ? (document.getElementById('req-valid-from').value || null) : null,
+    valid_until: !isSpecificDate ? (document.getElementById('req-valid-until').value || null) : null,
     start_time: start,
     end_time: end,
     required_count: parseInt(document.getElementById('req-count').value),
@@ -732,11 +901,21 @@ document.getElementById('btn-export-csv').addEventListener('click', exportCSV);
 document.getElementById('schedule-filter-emp').addEventListener('change', renderSchedule);
 document.getElementById('schedule-filter-area').addEventListener('change', renderSchedule);
 
+// Dauer einer Schicht in Stunden (berücksichtigt Schichten über Mitternacht)
+function shiftHours(start, end) {
+  if (!start || !end) return 0;
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  let s = sh + sm / 60, e = eh + em / 60;
+  if (e <= s) e += 24;
+  return e - s;
+}
+
 async function renderSchedule() {
   if (!state.businessId) return;
   updateWeekLabel();
   await loadBusinessMeta();
-  populateAreaRoleSelects();
+  populateScheduleFilters();
 
   const weekISO = fmtDateISO(state.currentWeekStart);
   const shifts = await api('GET', `/api/businesses/${state.businessId}/schedule?week_start=${weekISO}`);
@@ -744,49 +923,105 @@ async function renderSchedule() {
   const filterEmp = parseInt(document.getElementById('schedule-filter-emp').value) || null;
   const filterArea = parseInt(document.getElementById('schedule-filter-area').value) || null;
 
-  const filtered = shifts.filter(s => {
-    if (filterArea && s.area_id !== filterArea) return false;
-    if (filterEmp && !s.assignments.some(a => a.employee_id === filterEmp)) return false;
-    return true;
-  });
+  renderRosterMatrix(shifts, filterEmp, filterArea);
+  renderScheduleWarnings(shifts);
+}
 
+// Übersichtlicher Wochenkalender: Zeilen = Mitarbeiter, Spalten = Mo–So
+function renderRosterMatrix(shifts, filterEmp, filterArea) {
   const grid = document.getElementById('schedule-week-grid');
-  const today = fmtDateISO(new Date());
-  grid.innerHTML = '';
+  grid.style.display = 'block';
+  const todayISO = fmtDateISO(new Date());
 
+  if (shifts.length === 0) {
+    grid.innerHTML = '<div class="empty-state"><div class="icon">🗓️</div>' +
+      '<p>Noch kein Schichtplan für diese Woche.<br>Klicke oben auf „Plan erstellen".</p></div>';
+    return;
+  }
+
+  // Wochentage (ISO-Datum) berechnen
+  const days = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(state.currentWeekStart);
     d.setDate(d.getDate() + i);
-    const dISO = fmtDateISO(d);
-    const dayShifts = filtered.filter(s => s.date === dISO);
-
-    const col = document.createElement('div');
-    col.className = 'day-col';
-    col.innerHTML = `
-      <div class="day-header ${dISO === today ? 'today' : ''}">
-        <div>${WEEKDAYS_DE[i].slice(0,2)}</div>
-        <div style="font-size:13px;font-weight:400;">${d.getDate()}.${d.getMonth() + 1}.</div>
-      </div>
-      <div class="day-body">
-        ${dayShifts.length === 0
-          ? '<div style="padding:8px;color:var(--gray-300);font-size:11px;text-align:center;">–</div>'
-          : dayShifts.map(s => renderShiftCard(s)).join('')
-        }
-      </div>
-    `;
-    grid.appendChild(col);
+    days.push(fmtDateISO(d));
   }
 
-  // Warnings section
+  // Mitarbeiter, die angezeigt werden
+  let emps = state.employees.filter(e => e.is_active);
+  if (filterEmp) emps = emps.filter(e => e.id === filterEmp);
+
+  // Map: empId -> [Tag0..Tag6] -> [shifts], plus Stundensumme
+  const map = {}, hours = {};
+  emps.forEach(e => { map[e.id] = Array.from({ length: 7 }, () => []); hours[e.id] = 0; });
+
+  // Welche Tage haben überhaupt Schichten? (geschlossene Tage werden ausgeblendet)
+  const activeDays = new Set();
+  shifts.forEach(s => {
+    if (filterArea && s.area_id !== filterArea) return;
+    const di = days.indexOf(s.date);
+    if (di < 0) return;
+    activeDays.add(di);
+    s.assignments.forEach(a => {
+      if (!map[a.employee_id]) return;
+      map[a.employee_id][di].push(s);
+      hours[a.employee_id] += shiftHours(s.start_time?.slice(0,5), s.end_time?.slice(0,5));
+    });
+  });
+  const dayIdx = [...activeDays].sort((a, b) => a - b);
+
+  if (dayIdx.length === 0) {
+    grid.innerHTML = '<div class="empty-state"><div class="icon">🗓️</div><p>Keine Schichten für die aktuelle Auswahl.</p></div>';
+    return;
+  }
+
+  // Kopfzeile (nur geöffnete Tage)
+  let head = '<th class="emp-col">Mitarbeiter</th>';
+  dayIdx.forEach(i => {
+    const d = new Date(state.currentWeekStart);
+    d.setDate(d.getDate() + i);
+    const isToday = days[i] === todayISO;
+    head += `<th class="${isToday ? 'today-col' : ''}">${WEEKDAYS_DE[i].slice(0,2)}<br>` +
+      `<span class="day-date">${d.getDate()}.${d.getMonth() + 1}.</span></th>`;
+  });
+  head += '<th class="sum-col">Σ Std.</th>';
+
+  // Datenzeilen
+  let rows = '';
+  emps.forEach(e => {
+    let row = `<td class="emp-name">${e.name}<br><span class="emp-meta">${LEVEL_BADGES[e.experience_level] || ''}</span></td>`;
+    dayIdx.forEach(i => {
+      const cellShifts = map[e.id][i];
+      const isToday = days[i] === todayISO;
+      const chips = cellShifts.map(s =>
+        `<span class="roster-chip ${s.is_understaffed ? 'understaffed' : ''}" title="${s.area?.name || ''}${s.role ? ' · ' + s.role.name : ''}">
+          ${s.start_time?.slice(0,5)}–${s.end_time?.slice(0,5)}<br><small>${s.area?.name || ''}</small>
+        </span>`).join('');
+      row += `<td class="${isToday ? 'today-col-cell' : ''}">${chips || '<span class="roster-free">frei</span>'}</td>`;
+    });
+    const h = hours[e.id];
+    const target = e.target_hours_per_week || 0;
+    const over = target && h > e.max_hours_per_week;
+    row += `<td class="roster-hours ${over ? 'over' : ''}">${h.toFixed(1)}h<br><span class="hours-target">/ ${target}h</span></td>`;
+    rows += `<tr>${row}</tr>`;
+  });
+
+  grid.innerHTML = `<div class="roster-wrap"><table class="roster-table">
+    <thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function renderScheduleWarnings(shifts) {
   const warnings = shifts.filter(s => s.is_understaffed);
   const warnEl = document.getElementById('schedule-warnings');
   if (warnings.length === 0) {
-    warnEl.innerHTML = '';
+    warnEl.innerHTML = shifts.length > 0
+      ? '<div class="card" style="border-color:var(--success);"><div class="card-title" style="color:var(--success);">✅ Alle Schichten vollständig besetzt</div></div>'
+      : '';
     return;
   }
   warnEl.innerHTML = `
     <div class="card" style="border-color:var(--danger);">
-      <div class="card-title" style="color:var(--danger);">⚠️ Warnungen (${warnings.length} unterbesetzte Schichten)</div>
+      <div class="card-title" style="color:var(--danger);">⚠️ Unterbesetzte Schichten (${warnings.length})</div>
       ${warnings.map(s => `
         <div style="margin-bottom:8px;font-size:13px;padding:8px;background:var(--danger-light);border-radius:6px;">
           <b>${fmtDate(s.date)}</b> ${s.start_time?.slice(0,5)}–${s.end_time?.slice(0,5)} –
@@ -795,19 +1030,6 @@ async function renderSchedule() {
           ${s.understaffed_reason ? `<br><span class="text-sm" style="color:var(--danger);">${s.understaffed_reason}</span>` : ''}
         </div>
       `).join('')}
-    </div>
-  `;
-}
-
-function renderShiftCard(shift) {
-  const names = shift.assignments.map(a => a.employee?.name || '?').join(', ');
-  const cls = shift.is_understaffed ? 'shift-card understaffed' : 'shift-card';
-  return `
-    <div class="${cls}">
-      <div class="shift-time">${shift.start_time?.slice(0,5)}–${shift.end_time?.slice(0,5)}</div>
-      <div class="shift-area">${shift.area?.name || '–'}${shift.role ? ` · ${shift.role.name}` : ''}</div>
-      <div class="shift-staff">${shift.assigned_count}/${shift.required_count} · ${names || '–'}</div>
-      ${shift.is_understaffed ? '<div class="shift-warn">⚠️ Unterbesetzt</div>' : ''}
     </div>
   `;
 }
@@ -822,6 +1044,8 @@ async function generateSchedule() {
     if (result.understaffed_count > 0) {
       toast(`⚠️ ${result.understaffed_count} Schichten unterbesetzt`, 'info');
     }
+    // Direkt zum Schichtplan-Kalender springen, damit man das Ergebnis sofort sieht
+    navigate('schedule');
     await renderSchedule();
     await loadDashboard();
   } catch (e) { toast(e.message, 'error'); }
@@ -877,6 +1101,8 @@ document.getElementById('btn-gemini-analyze').addEventListener('click', async ()
 // ── Init ───────────────────────────────────────────────────────────────────────
 
 async function init() {
+  // 24h-Zeit-Dropdowns füllen
+  populateTimeSelects();
   // Set default week filter
   document.getElementById('avail-filter-week').value = fmtDateISO(state.currentWeekStart);
   updateWeekLabel();
