@@ -8,11 +8,17 @@ import json
 from datetime import date
 from typing import List
 
-try:
-    import google.generativeai as genai
-    GENAI_AVAILABLE = True
-except ImportError:
-    GENAI_AVAILABLE = False
+# Hinweis: 'google.generativeai' wird absichtlich NICHT auf Modulebene importiert.
+# Das Laden der nativen grpc/protobuf-Bibliotheken kann beim Serverstart sehr lange
+# dauern oder haengen (z.B. unter Python 3.14 / Apple Silicon). Da der Gemini-Assistent
+# optional ist, wird das Paket erst beim tatsaechlichen Aufruf der Analyse importiert.
+def _load_genai():
+    """Importiert google.generativeai bei Bedarf. Gibt (modul, fehler) zurueck."""
+    try:
+        import google.generativeai as genai
+        return genai, None
+    except Exception as e:  # ImportError und andere Ladefehler abfangen
+        return None, e
 
 
 def _build_prompt(summary: dict) -> str:
@@ -68,9 +74,10 @@ def analyze_schedule(summary: dict) -> dict:
             "available": False,
         }
 
-    if not GENAI_AVAILABLE:
+    genai, load_error = _load_genai()
+    if genai is None:
         return {
-            "analysis": "Gemini-Assistent nicht verfügbar: Das Paket 'google-generativeai' ist nicht installiert.",
+            "analysis": f"Gemini-Assistent nicht verfügbar: Das Paket 'google-generativeai' konnte nicht geladen werden ({load_error}).",
             "available": False,
         }
 
